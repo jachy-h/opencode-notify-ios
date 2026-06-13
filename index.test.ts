@@ -183,20 +183,20 @@ describe("BarkNotifyPlugin", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(0)
   })
 
-  it("deduplicates consecutive identical messages", async () => {
+  it("deduplicates identical messages within time window", async () => {
     const config = { deviceKey: "k" }
     spyOn(fs, "existsSync").mockReturnValue(true)
     spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
 
     const plugin = await BarkNotifyPlugin({ directory: "/x" })
-    // Send same event type twice with default template → same title+body
+    await plugin.event!({ event: { type: "session.idle" } })
     await plugin.event!({ event: { type: "session.idle" } })
     await plugin.event!({ event: { type: "session.idle" } })
 
     expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
-  it("sends non-consecutive identical messages after different message", async () => {
+  it("deduplicates non-consecutive identical messages within window", async () => {
     const config = {
       deviceKey: "k",
       templates: {
@@ -212,7 +212,7 @@ describe("BarkNotifyPlugin", () => {
     await plugin.event!({ event: { type: "session.error" } })
     await plugin.event!({ event: { type: "session.idle" } })
 
-    expect(fetchSpy).toHaveBeenCalledTimes(3)
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
   })
 
   it("sends different event types with different templates", async () => {

@@ -11,9 +11,30 @@ interface BarkConfig {
   sound?: string
   enable?: string[]
   templates?: Record<string, Template>
+  dedupWindowMs?: number
 }
 
 const DEFAULT_ENABLE = ["permission.asked", "session.error", "session.idle", "session.created"]
+const DEFAULT_DEDUP_WINDOW_MS = 5000
+
+class DedupBuffer {
+  private seen = new Map<string, number>()
+  windowMs: number
+
+  constructor(windowMs = DEFAULT_DEDUP_WINDOW_MS) {
+    this.windowMs = windowMs
+  }
+
+  shouldSkip(key: string): boolean {
+    const now = Date.now()
+    for (const [k, ts] of this.seen) {
+      if (now - ts > this.windowMs) this.seen.delete(k)
+    }
+    if (this.seen.has(key)) return true
+    this.seen.set(key, now)
+    return false
+  }
+}
 
 export function loadConfig(directory: string): BarkConfig {
   const configPath = join(directory, "notify-ios.json")
@@ -54,7 +75,7 @@ export async function sendBarkNotification(
 }
 
 export const BarkNotifyPlugin = async ({ directory }: { directory: string }) => {
-  let lastContent: { title: string; body: string } | null = null
+  let dedupBuffer = new DedupBuffer()
 
   return {
     event: async ({ event }: { event: { type: string } }) => {
@@ -66,10 +87,15 @@ export const BarkNotifyPlugin = async ({ directory }: { directory: string }) => 
 
       const { title, body } = resolveTemplate(config.templates, event.type)
 
-      if (lastContent && lastContent.title === title && lastContent.body === body) return
+      const windowMs = config.dedupWindowMs ?? DEFAULT_DEDUP_WINDOW_MS
+      if (dedupBuffer.windowMs !== windowMs) {
+        dedupBuffer = new DedupBuffer(windowMs)
+      }
+
+      const dedupKey = `${title}\x00${body}`
+      if (dedupBuffer.shouldSkip(dedupKey)) return
 
       await sendBarkNotification(config.deviceKey, title, body, config.sound || "default")
-      lastContent = { title, body }
     },
   }
 }
