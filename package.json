@@ -19,7 +19,7 @@
   "files": [
     "index.ts"
   ],
-  "private": true,
+  "private": false,
   "devDependencies": {
     "@types/bun": "latest"
   },
