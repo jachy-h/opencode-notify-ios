@@ -13,7 +13,7 @@ interface BarkConfig {
   templates?: Record<string, Template>
 }
 
-const DEFAULT_ENABLE = ["permission.asked", "session.error", "session.idle"]
+const DEFAULT_ENABLE = ["permission.asked", "session.error", "session.idle", "session.created"]
 
 export function loadConfig(directory: string): BarkConfig {
   const configPath = join(directory, "notify-ios.json")
@@ -54,6 +54,8 @@ export async function sendBarkNotification(
 }
 
 export const BarkNotifyPlugin = async ({ directory }: { directory: string }) => {
+  let lastContent: { title: string; body: string } | null = null
+
   return {
     event: async ({ event }: { event: { type: string } }) => {
       const config = loadConfig(directory)
@@ -63,7 +65,11 @@ export const BarkNotifyPlugin = async ({ directory }: { directory: string }) => 
       if (!enable.includes(event.type)) return
 
       const { title, body } = resolveTemplate(config.templates, event.type)
+
+      if (lastContent && lastContent.title === title && lastContent.body === body) return
+
       await sendBarkNotification(config.deviceKey, title, body, config.sound || "default")
+      lastContent = { title, body }
     },
   }
 }

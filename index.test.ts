@@ -159,6 +159,20 @@ describe("BarkNotifyPlugin", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
+  it("sends notification for session.created with defaults", async () => {
+    const config = { deviceKey: "k" }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
+
+    const plugin = await BarkNotifyPlugin({ directory: "/x" })
+    await plugin.event!({ event: { type: "session.created" } })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+
+    const url = fetchSpy.mock.calls[0][0] as string
+    expect(url).toContain("OpenCode")
+    expect(url).toContain(encodeURIComponent("Event: session.created"))
+  })
+
   it("respects empty enable list", async () => {
     const config = { deviceKey: "k", enable: [] }
     spyOn(fs, "existsSync").mockReturnValue(true)
@@ -169,9 +183,59 @@ describe("BarkNotifyPlugin", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(0)
   })
 
+  it("deduplicates consecutive identical messages", async () => {
+    const config = { deviceKey: "k" }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
+
+    const plugin = await BarkNotifyPlugin({ directory: "/x" })
+    // Send same event type twice with default template → same title+body
+    await plugin.event!({ event: { type: "session.idle" } })
+    await plugin.event!({ event: { type: "session.idle" } })
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("sends non-consecutive identical messages after different message", async () => {
+    const config = {
+      deviceKey: "k",
+      templates: {
+        "session.idle": { body: "Idle" },
+        "session.error": { body: "Error" },
+      },
+    }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
+
+    const plugin = await BarkNotifyPlugin({ directory: "/x" })
+    await plugin.event!({ event: { type: "session.idle" } })
+    await plugin.event!({ event: { type: "session.error" } })
+    await plugin.event!({ event: { type: "session.idle" } })
+
+    expect(fetchSpy).toHaveBeenCalledTimes(3)
+  })
+
+  it("sends different event types with different templates", async () => {
+    const config = {
+      deviceKey: "k",
+      templates: {
+        "session.idle": { body: "Idle" },
+        "session.error": { body: "Error" },
+      },
+    }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
+
+    const plugin = await BarkNotifyPlugin({ directory: "/x" })
+    await plugin.event!({ event: { type: "session.idle" } })
+    await plugin.event!({ event: { type: "session.error" } })
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+
   it("re-reads config on each event (hot reload)", async () => {
-    const config1 = { deviceKey: "k1", enable: ["session.idle"] }
-    const config2 = { deviceKey: "k2", enable: ["session.idle"] }
+    const config1 = { deviceKey: "k1", enable: ["session.idle", "session.error"] }
+    const config2 = { deviceKey: "k2", enable: ["session.idle", "session.error"] }
     spyOn(fs, "existsSync").mockReturnValue(true)
 
     let callCount = 0
@@ -186,8 +250,8 @@ describe("BarkNotifyPlugin", () => {
     let url = fetchSpy.mock.calls[0][0] as string
     expect(url).toContain("k1")
 
-    // modify config, next event should use new key
-    await plugin.event!({ event: { type: "session.idle" } })
+    // modify config, next event should use new key (different event type to bypass dedup)
+    await plugin.event!({ event: { type: "session.error" } })
 
     url = fetchSpy.mock.calls[1][0] as string
     expect(url).toContain("k2")

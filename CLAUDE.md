@@ -9,6 +9,14 @@ Default to using Bun instead of Node.js.
 - Use `bunx <package> <command>` instead of `npx <package> <command>`
 - Bun automatically loads .env, so don't use dotenv.
 
+## Publishing
+
+After making changes to `index.ts`, remind the user to bump the version in `package.json` and publish the npm package:
+
+```sh
+npm version patch && npm publish
+```
+
 ## APIs
 
 - `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
