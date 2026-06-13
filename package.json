@@ -1,6 +1,6 @@
 {
   "name": "@jachy/opencode-notify-ios",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "OpenCode plugin for iOS push notifications via Bark",
   "main": "index.ts",
   "license": "MIT",
