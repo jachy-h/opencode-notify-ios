@@ -1,7 +1,7 @@
 {
   "deviceKey": "",
   "sound": "default",
-  "enable": ["permission.asked", "session.error"],
+  "enable": ["permission.asked", "session.error", "session.idle"],
   "templates": {
     "permission.asked": {
       "title": "OpenCode 需要确认",
