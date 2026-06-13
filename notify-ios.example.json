@@ -1,7 +1,7 @@
 {
   "deviceKey": "",
   "sound": "default",
-  "enable": ["permission.asked", "session.error", "session.idle"],
+  "enable": ["permission.asked", "session.error", "session.idle", "session.created"],
   "templates": {
     "permission.asked": {
       "title": "OpenCode 需要确认",
@@ -14,6 +14,10 @@
     "session.idle": {
       "title": "OpenCode 空闲",
       "body": "会话进入空闲，等待操作"
+    },
+    "session.created": {
+      "title": "OpenCode",
+      "body": "已开启对话通知"
     }
   }
 }
