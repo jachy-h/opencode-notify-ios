@@ -1,0 +1,75 @@
+# opencode-notify-ios
+
+通过 [Bark](https://bark.day.app) 将 OpenCode 事件推送通知到 iOS 设备。
+
+## 前提
+
+在 App Store 安装 [Bark](https://apps.apple.com/app/bark-customed-notifications/id1403753865)，获取设备密钥。
+
+## 安装
+
+### 全局安装
+
+编辑 `~/.config/opencode/opencode.json`：
+
+```json
+{
+  "plugin": ["@jachy/opencode-notify-ios"]
+}
+```
+
+### 项目安装
+
+在项目根目录创建或编辑 `opencode.json`：
+
+```json
+{
+  "plugin": ["@jachy/opencode-notify-ios"]
+}
+```
+
+## 配置
+
+在项目根目录创建 `notify-ios.json`：
+
+```json
+{
+  "deviceKey": "your_bark_device_key",
+  "sound": "default",
+  "enable": ["permission.asked", "session.error"],
+  "templates": {
+    "permission.asked": {
+      "title": "OpenCode 需要确认",
+      "body": "请确认操作"
+    }
+  }
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `deviceKey` | **必填**。Bark 设备密钥 |
+| `sound` | 通知声音，默认 `"default"` |
+| `enable` | 启用的事件列表。默认 `["permission.asked", "session.error", "session.idle"]`，设为 `[]` 关闭所有通知 |
+| `templates` | 按事件自定义文案，`body` 支持 `\n` 换行 |
+
+配置文件修改即时生效，无需重启。
+
+## 事件
+
+| 推荐 | 事件 | 触发时机 |
+|:---:|------|------|
+| ✓ | `permission.asked` | OpenCode 需要用户确认 |
+| ✓ | `session.error` | 会话发生错误 |
+| | `session.idle` | 会话进入空闲 |
+
+完整事件列表见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+
+## 安全
+
+`notify-ios.json` 包含 Bark 设备密钥，**强烈建议**将其加入 `.gitignore`，避免密钥泄露：
+
+```gitignore
+# opencode-notify-ios
+notify-ios.json
+```
