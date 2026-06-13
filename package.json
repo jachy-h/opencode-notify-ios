@@ -26,7 +26,5 @@
   "peerDependencies": {
     "typescript": "^5"
   },
-  "dependencies": {
-    "@jachy/opencode-notify-ios": "^1.0.1"
-  }
+  "dependencies": {}
 }
