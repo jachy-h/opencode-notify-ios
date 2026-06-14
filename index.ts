@@ -57,6 +57,22 @@ export function resolveTemplate(
   }
 }
 
+function pad(n: number): string {
+  return n.toString().padStart(2, "0")
+}
+
+export function resolveVariables(
+  template: string,
+  event: { type: string; session?: { title?: string } },
+): string {
+  const now = new Date()
+  const time = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+
+  return template
+    .replace(/\{\{time\}\}/g, time)
+    .replace(/\{\{session\.title\}\}/g, event.session?.title || "")
+}
+
 export async function sendBarkNotification(
   deviceKey: string,
   title: string,
@@ -78,7 +94,7 @@ export const BarkNotifyPlugin = async ({ directory }: { directory: string }) => 
   let dedupBuffer = new DedupBuffer()
 
   return {
-    event: async ({ event }: { event: { type: string } }) => {
+    event: async ({ event }: { event: { type: string; session?: { title?: string } } }) => {
       const config = loadConfig(directory)
       if (!config.deviceKey) return
 
@@ -86,16 +102,18 @@ export const BarkNotifyPlugin = async ({ directory }: { directory: string }) => 
       if (!enable.includes(event.type)) return
 
       const { title, body } = resolveTemplate(config.templates, event.type)
+      const resolvedTitle = resolveVariables(title, event)
+      const resolvedBody = resolveVariables(body, event)
 
       const windowMs = config.dedupWindowMs ?? DEFAULT_DEDUP_WINDOW_MS
       if (dedupBuffer.windowMs !== windowMs) {
         dedupBuffer = new DedupBuffer(windowMs)
       }
 
-      const dedupKey = `${title}\x00${body}`
+      const dedupKey = `${resolvedTitle}\x00${resolvedBody}`
       if (dedupBuffer.shouldSkip(dedupKey)) return
 
-      await sendBarkNotification(config.deviceKey, title, body, config.sound || "default")
+      await sendBarkNotification(config.deviceKey, resolvedTitle, resolvedBody, config.sound || "default")
     },
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from "bun:test"
-import { loadConfig, resolveTemplate, sendBarkNotification, BarkNotifyPlugin } from "./index"
+import { loadConfig, resolveTemplate, resolveVariables, sendBarkNotification, BarkNotifyPlugin } from "./index"
 import * as fs from "fs"
 
 // ---------------------------------------------------------------------------
@@ -64,6 +64,55 @@ describe("resolveTemplate", () => {
   it("falls back for missing title or body", () => {
     expect(resolveTemplate({ "e": { body: "B" } }, "e")).toEqual({ title: "OpenCode", body: "B" })
     expect(resolveTemplate({ "e": { title: "T" } }, "e")).toEqual({ title: "T", body: "Event: e" })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// resolveVariables
+// ---------------------------------------------------------------------------
+describe("resolveVariables", () => {
+  it("replaces {{time}} with current local time", () => {
+    const result = resolveVariables("Time: {{time}}", { type: "session.idle" })
+    expect(result).toMatch(/^Time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+  })
+
+  it("replaces {{session.title}} with session title", () => {
+    const result = resolveVariables("Session: {{session.title}}", {
+      type: "session.idle",
+      session: { title: "Fix login bug" },
+    })
+    expect(result).toBe("Session: Fix login bug")
+  })
+
+  it("replaces {{session.title}} with empty string when session is missing", () => {
+    const result = resolveVariables("Session: {{session.title}}", { type: "session.idle" })
+    expect(result).toBe("Session: ")
+  })
+
+  it("replaces {{session.title}} with empty string when title is missing", () => {
+    const result = resolveVariables("Session: {{session.title}}", {
+      type: "session.idle",
+      session: {},
+    })
+    expect(result).toBe("Session: ")
+  })
+
+  it("replaces multiple variables in one template", () => {
+    const result = resolveVariables("[{{time}}] {{session.title}}", {
+      type: "session.idle",
+      session: { title: "Fix bug" },
+    })
+    expect(result).toMatch(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] Fix bug$/)
+  })
+
+  it("leaves unrecognized variables unchanged", () => {
+    const result = resolveVariables("Hello {{unknown}}", { type: "session.idle" })
+    expect(result).toBe("Hello {{unknown}}")
+  })
+
+  it("returns template unchanged when no variables present", () => {
+    const result = resolveVariables("Plain text", { type: "session.idle" })
+    expect(result).toBe("Plain text")
   })
 })
 
@@ -255,5 +304,26 @@ describe("BarkNotifyPlugin", () => {
 
     url = fetchSpy.mock.calls[1][0] as string
     expect(url).toContain("k2")
+  })
+
+  it("resolves variables in template before sending", async () => {
+    const config = {
+      deviceKey: "k",
+      templates: {
+        "session.idle": { title: "{{session.title}}", body: "Time: {{time}}" },
+      },
+    }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
+
+    const plugin = await BarkNotifyPlugin({ directory: "/x" })
+    await plugin.event!({
+      event: { type: "session.idle", session: { title: "My Session" } },
+    })
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const url = fetchSpy.mock.calls[0][0] as string
+    expect(url).toContain(encodeURIComponent("My Session"))
+    expect(url).toMatch(/Time%3A%20\d{4}-\d{2}-\d{2}%20\d{2}%3A\d{2}%3A\d{2}/)
   })
 })

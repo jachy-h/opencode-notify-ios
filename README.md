@@ -51,9 +51,31 @@
 | `deviceKey` | **必填**。Bark 设备密钥 |
 | `sound` | 通知声音，默认 `"default"` |
 | `enable` | 启用的事件列表。默认 `["permission.asked", "session.error", "session.idle"]`，设为 `[]` 关闭所有通知 |
-| `templates` | 按事件自定义文案，`body` 支持 `\n` 换行 |
+| `templates` | 按事件自定义文案，`body` 支持 `\n` 换行。支持变量 `{{time}}`（当前本地时间）和 `{{session.title}}`（会话标题） |
 
 配置文件修改即时生效，无需重启。
+
+### 模板变量
+
+`title` 和 `body` 中可使用以下变量，运行时自动替换：
+
+| 变量 | 说明 | 示例值 |
+|------|------|--------|
+| `{{time}}` | 当前本地时间 | `2026-06-14 15:30:00` |
+| `{{session.title}}` | 当前会话标题 | `修复登录 Bug` |
+
+示例：
+
+```json
+{
+  "templates": {
+    "session.idle": {
+      "title": "OpenCode 空闲",
+      "body": "[{{time}}] 会话「{{session.title}}」进入空闲"
+    }
+  }
+}
+```
 
 ## 事件
 
