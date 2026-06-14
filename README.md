@@ -36,7 +36,7 @@
 {
   "deviceKey": "your_bark_device_key",
   "sound": "default",
-  "enable": ["permission.asked", "session.error"],
+  "enable": ["permission.updated", "session.error"],
   "templates": {
     "permission.asked": {
       "title": "OpenCode 需要确认",
@@ -63,6 +63,7 @@
 |------|------|--------|
 | `{{time}}` | 当前本地时间 | `2026-06-14 15:30:00` |
 | `{{session.title}}` | 当前会话标题 | `修复登录 Bug` |
+| `{{project.name}}` | 项目目录名 | `opencode-push-ios` |
 
 示例：
 

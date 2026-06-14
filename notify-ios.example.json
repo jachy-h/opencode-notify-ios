@@ -1,23 +1,23 @@
 {
   "deviceKey": "",
   "sound": "default",
-  "enable": ["permission.asked", "session.error", "session.idle", "session.created"],
+  "enable": ["permission.updated", "session.error", "session.idle", "session.created"],
   "dedupWindowMs": 5000,
   "templates": {
-    "permission.asked": {
-      "title": "OpenCode「{{session.title}}」 需要确认",
+    "permission.updated": {
+      "title": "「{{project.name}}」 需要确认",
       "body": "请确认操作 - [{{time}}]"
     },
     "session.error": {
-      "title": "OpenCode「{{session.title}}」 异常",
+      "title": "「{{project.name}}」 异常",
       "body": "会话发生错误 - [{{time}}]"
     },
     "session.idle": {
-      "title": "OpenCode「{{session.title}}」 空闲",
+      "title": "「{{project.name}}」 空闲",
       "body": "会话进入空闲，等待操作 - [{{time}}]"
     },
     "session.created": {
-      "title": "OpenCode「{{session.title}}」 开始会话",
+      "title": "「{{project.name}}」 开始会话",
       "body": "已开启对话通知 - [{{time}}]"
     }
   }

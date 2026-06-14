@@ -76,31 +76,68 @@ describe("resolveVariables", () => {
     expect(result).toMatch(/^Time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
   })
 
-  it("replaces {{session.title}} with session title", () => {
+  it("replaces {{session.title}} from properties.info.title (session.created style)", () => {
     const result = resolveVariables("Session: {{session.title}}", {
-      type: "session.idle",
-      session: { title: "Fix login bug" },
+      type: "session.created",
+      properties: { info: { title: "Fix login bug" } },
     })
     expect(result).toBe("Session: Fix login bug")
   })
 
-  it("replaces {{session.title}} with empty string when session is missing", () => {
+  it("replaces {{session.title}} from properties.title (permission style)", () => {
+    const result = resolveVariables("Session: {{session.title}}", {
+      type: "permission.updated",
+      properties: { title: "Approve change" },
+    })
+    expect(result).toBe("Session: Approve change")
+  })
+
+  it("replaces {{session.title}} with empty string when properties is missing", () => {
     const result = resolveVariables("Session: {{session.title}}", { type: "session.idle" })
     expect(result).toBe("Session: ")
   })
 
-  it("replaces {{session.title}} with empty string when title is missing", () => {
+  it("replaces {{session.title}} with empty string when info.title is missing", () => {
     const result = resolveVariables("Session: {{session.title}}", {
-      type: "session.idle",
-      session: {},
+      type: "session.created",
+      properties: { info: {} },
     })
     expect(result).toBe("Session: ")
   })
 
+  it("falls back to sessionTitles cache when event has only sessionID", () => {
+    const cache = new Map<string, string>()
+    cache.set("abc123", "Cached Session Title")
+    const result = resolveVariables("Session: {{session.title}}", {
+      type: "session.idle",
+      properties: { sessionID: "abc123" },
+    }, cache)
+    expect(result).toBe("Session: Cached Session Title")
+  })
+
+  it("returns empty when sessionID not in cache", () => {
+    const cache = new Map<string, string>()
+    const result = resolveVariables("Session: {{session.title}}", {
+      type: "session.idle",
+      properties: { sessionID: "unknown" },
+    }, cache)
+    expect(result).toBe("Session: ")
+  })
+
+  it("info.title takes priority over cache", () => {
+    const cache = new Map<string, string>()
+    cache.set("abc123", "Stale Cached Title")
+    const result = resolveVariables("Session: {{session.title}}", {
+      type: "session.updated",
+      properties: { info: { id: "abc123", title: "Fresh Title" } },
+    }, cache)
+    expect(result).toBe("Session: Fresh Title")
+  })
+
   it("replaces multiple variables in one template", () => {
     const result = resolveVariables("[{{time}}] {{session.title}}", {
-      type: "session.idle",
-      session: { title: "Fix bug" },
+      type: "session.created",
+      properties: { info: { title: "Fix bug" } },
     })
     expect(result).toMatch(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] Fix bug$/)
   })
@@ -108,6 +145,24 @@ describe("resolveVariables", () => {
   it("leaves unrecognized variables unchanged", () => {
     const result = resolveVariables("Hello {{unknown}}", { type: "session.idle" })
     expect(result).toBe("Hello {{unknown}}")
+  })
+
+  it("replaces {{project.name}} with provided project name", () => {
+    const result = resolveVariables("Project: {{project.name}}", { type: "session.idle" }, undefined, "my-project")
+    expect(result).toBe("Project: my-project")
+  })
+
+  it("replaces {{project.name}} with empty string when not provided", () => {
+    const result = resolveVariables("Project: {{project.name}}", { type: "session.idle" })
+    expect(result).toBe("Project: ")
+  })
+
+  it("replaces all three variables in one template", () => {
+    const result = resolveVariables("[{{time}}] {{project.name}} {{session.title}}", {
+      type: "session.created",
+      properties: { info: { title: "Fix bug" } },
+    }, undefined, "my-project")
+    expect(result).toMatch(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] my-project Fix bug$/)
   })
 
   it("returns template unchanged when no variables present", () => {
@@ -204,7 +259,7 @@ describe("BarkNotifyPlugin", () => {
     spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
 
     const plugin = await BarkNotifyPlugin({ directory: "/x" })
-    await plugin.event!({ event: { type: "permission.asked" } })
+    await plugin.event!({ event: { type: "permission.updated" } })
     expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
@@ -306,11 +361,11 @@ describe("BarkNotifyPlugin", () => {
     expect(url).toContain("k2")
   })
 
-  it("resolves variables in template before sending", async () => {
+  it("resolves variables in template before sending (info.title style)", async () => {
     const config = {
       deviceKey: "k",
       templates: {
-        "session.idle": { title: "{{session.title}}", body: "Time: {{time}}" },
+        "session.created": { title: "{{session.title}}", body: "Time: {{time}}" },
       },
     }
     spyOn(fs, "existsSync").mockReturnValue(true)
@@ -318,12 +373,179 @@ describe("BarkNotifyPlugin", () => {
 
     const plugin = await BarkNotifyPlugin({ directory: "/x" })
     await plugin.event!({
-      event: { type: "session.idle", session: { title: "My Session" } },
+      event: {
+        type: "session.created",
+        properties: { info: { title: "My Session" } },
+      },
     })
 
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     const url = fetchSpy.mock.calls[0][0] as string
     expect(url).toContain(encodeURIComponent("My Session"))
     expect(url).toMatch(/Time%3A%20\d{4}-\d{2}-\d{2}%20\d{2}%3A\d{2}%3A\d{2}/)
+  })
+
+  it("resolves variables in template before sending (properties.title style)", async () => {
+    const config = {
+      deviceKey: "k",
+      enable: ["permission.updated"],
+      templates: {
+        "permission.updated": { title: "{{session.title}}", body: "Time: {{time}}" },
+      },
+    }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
+
+    const plugin = await BarkNotifyPlugin({ directory: "/x" })
+    await plugin.event!({
+      event: {
+        type: "permission.updated",
+        properties: { title: "Approve change" },
+      },
+    })
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const url = fetchSpy.mock.calls[0][0] as string
+    expect(url).toContain(encodeURIComponent("Approve change"))
+  })
+
+  it("resolves {{session.title}} from cache for session.idle after session.created", async () => {
+    const config = {
+      deviceKey: "k",
+      templates: {
+        "session.created": { title: "Created: {{session.title}}" },
+        "session.idle": { title: "Idle: {{session.title}}" },
+      },
+    }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
+
+    const plugin = await BarkNotifyPlugin({ directory: "/x" })
+
+    // First, create a session to populate the cache
+    await plugin.event!({
+      event: {
+        type: "session.created",
+        properties: { info: { id: "sess-1", title: "Fix login" } },
+      },
+    })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    let url = fetchSpy.mock.calls[0][0] as string
+    expect(url).toContain(encodeURIComponent("Fix login"))
+
+    // Then, idle event that only has sessionID - should lookup cache
+    await plugin.event!({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "sess-1" },
+      },
+    })
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    url = fetchSpy.mock.calls[1][0] as string
+    expect(url).toContain(encodeURIComponent("Fix login"))
+  })
+
+  it("session.updated refreshes cached title", async () => {
+    const config = {
+      deviceKey: "k",
+      enable: ["session.created", "session.updated", "session.idle"],
+      templates: {
+        "session.created": { title: "C: {{session.title}}" },
+        "session.updated": { title: "U: {{session.title}}" },
+        "session.idle": { title: "I: {{session.title}}" },
+      },
+    }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
+
+    const plugin = await BarkNotifyPlugin({ directory: "/x" })
+
+    // Create session with initial title
+    await plugin.event!({
+      event: {
+        type: "session.created",
+        properties: { info: { id: "sess-1", title: "Old Title" } },
+      },
+    })
+
+    // Update session with new title
+    await plugin.event!({
+      event: {
+        type: "session.updated",
+        properties: { info: { id: "sess-1", title: "New Title" } },
+      },
+    })
+
+    // Idle event should use updated title
+    await plugin.event!({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "sess-1" },
+      },
+    })
+
+    expect(fetchSpy).toHaveBeenCalledTimes(3)
+    const url = fetchSpy.mock.calls[2][0] as string
+    expect(url).toContain(encodeURIComponent("New Title"))
+  })
+
+  it("resolves {{project.name}} from directory basename", async () => {
+    const config = {
+      deviceKey: "k",
+      templates: {
+        "session.created": { title: "{{project.name}}", body: "Started" },
+      },
+    }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
+
+    const plugin = await BarkNotifyPlugin({ directory: "/home/user/my-awesome-project" })
+    await plugin.event!({ event: { type: "session.created" } })
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const url = fetchSpy.mock.calls[0][0] as string
+    expect(url).toContain(encodeURIComponent("my-awesome-project"))
+  })
+
+  it("clears cached title on session.deleted", async () => {
+    const config = {
+      deviceKey: "k",
+      templates: {
+        "session.created": { title: "C: {{session.title}}" },
+        "session.idle": { title: "I: {{session.title}}" },
+      },
+    }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(config))
+
+    const plugin = await BarkNotifyPlugin({ directory: "/x" })
+
+    // Create and cache
+    await plugin.event!({
+      event: {
+        type: "session.created",
+        properties: { info: { id: "sess-1", title: "Removed" } },
+      },
+    })
+
+    // Delete -> cache entry removed
+    await plugin.event!({
+      event: {
+        type: "session.deleted",
+        properties: { info: { id: "sess-1" } },
+      },
+    })
+
+    // Idle -> title should be empty (cache miss)
+    await plugin.event!({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "sess-1" },
+      },
+    })
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    const url = fetchSpy.mock.calls[1][0] as string
+    expect(url).toContain(encodeURIComponent("I: "))
   })
 })

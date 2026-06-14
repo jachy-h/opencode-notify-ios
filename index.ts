@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from "fs"
-import { join } from "path"
+import { join, basename } from "path"
 
 interface Template {
   title?: string
@@ -14,8 +14,18 @@ interface BarkConfig {
   dedupWindowMs?: number
 }
 
-const DEFAULT_ENABLE = ["permission.asked", "session.error", "session.idle", "session.created"]
+interface OpenCodeEvent {
+  type: string
+  properties?: {
+    info?: { title?: string; id?: string }
+    title?: string
+    sessionID?: string
+  }
+}
+
+const DEFAULT_ENABLE = ["permission.updated", "session.error", "session.idle", "session.created"]
 const DEFAULT_DEDUP_WINDOW_MS = 5000
+const MAX_SESSION_CACHE = 50
 
 class DedupBuffer {
   private seen = new Map<string, number>()
@@ -61,16 +71,39 @@ function pad(n: number): string {
   return n.toString().padStart(2, "0")
 }
 
+function extractSessionTitle(event: OpenCodeEvent, sessionTitles?: Map<string, string>): string {
+  const fromInfo = event.properties?.info?.title
+  if (fromInfo) return fromInfo
+
+  const fromProps = event.properties?.title
+  if (fromProps) return fromProps
+
+  if (sessionTitles) {
+    const sid = event.properties?.sessionID
+    if (sid) {
+      const cached = sessionTitles.get(sid)
+      if (cached) return cached
+    }
+  }
+
+  return ""
+}
+
 export function resolveVariables(
   template: string,
-  event: { type: string; session?: { title?: string } },
+  event: OpenCodeEvent,
+  sessionTitles?: Map<string, string>,
+  projectName?: string,
 ): string {
   const now = new Date()
   const time = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
 
+  const sessionTitle = extractSessionTitle(event, sessionTitles)
+
   return template
     .replace(/\{\{time\}\}/g, time)
-    .replace(/\{\{session\.title\}\}/g, event.session?.title || "")
+    .replace(/\{\{session\.title\}\}/g, sessionTitle)
+    .replace(/\{\{project\.name\}\}/g, projectName || "")
 }
 
 export async function sendBarkNotification(
@@ -92,26 +125,43 @@ export async function sendBarkNotification(
 
 export const BarkNotifyPlugin = async ({ directory }: { directory: string }) => {
   let dedupBuffer = new DedupBuffer()
+  const sessionTitles = new Map<string, string>()
+  const projectName = basename(directory)
 
   return {
-    event: async ({ event }: { event: { type: string; session?: { title?: string } } }) => {
+    event: async ({ event }: { event: OpenCodeEvent }) => {
       const config = loadConfig(directory)
       if (!config.deviceKey) return
+
+      const title = event.properties?.info?.title
+      const sid = event.properties?.info?.id || event.properties?.sessionID
+
+      if (event.type === "session.deleted" && sid) {
+        sessionTitles.delete(sid)
+      } else if (title && sid) {
+        if (sessionTitles.size >= MAX_SESSION_CACHE && !sessionTitles.has(sid)) {
+          const oldest = sessionTitles.keys().next().value
+          if (oldest !== undefined) sessionTitles.delete(oldest)
+        }
+        sessionTitles.set(sid, title)
+      }
 
       const enable = config.enable ?? DEFAULT_ENABLE
       if (!enable.includes(event.type)) return
 
-      const { title, body } = resolveTemplate(config.templates, event.type)
-      const resolvedTitle = resolveVariables(title, event)
-      const resolvedBody = resolveVariables(body, event)
+      const { title: tplTitle, body: tplBody } = resolveTemplate(config.templates, event.type)
+      const sessionTitle = extractSessionTitle(event, sessionTitles)
 
       const windowMs = config.dedupWindowMs ?? DEFAULT_DEDUP_WINDOW_MS
       if (dedupBuffer.windowMs !== windowMs) {
         dedupBuffer = new DedupBuffer(windowMs)
       }
 
-      const dedupKey = `${resolvedTitle}\x00${resolvedBody}`
+      const dedupKey = `${event.type}\x00${tplTitle}\x00${tplBody}\x00${sessionTitle}`
       if (dedupBuffer.shouldSkip(dedupKey)) return
+
+      const resolvedTitle = resolveVariables(tplTitle, event, sessionTitles, projectName)
+      const resolvedBody = resolveVariables(tplBody, event, sessionTitles, projectName)
 
       await sendBarkNotification(config.deviceKey, resolvedTitle, resolvedBody, config.sound || "default")
     },

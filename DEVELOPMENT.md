@@ -21,9 +21,10 @@
 ### 本地运行
 
 ```bash
-# 将 index.ts 复制到 .opencode/plugins/ 即可在本地加载插件
+# 将 index.ts hardlink 到 .opencode/plugins/ 即可在本地加载插件
+# hardlink 确保修改 index.ts 后插件自动生效，无需手动复制
 mkdir -p .opencode/plugins
-cp index.ts .opencode/plugins/notify-ios.ts
+ln -f index.ts .opencode/plugins/notify-ios.ts
 
 # 跑测试
 bun test
@@ -42,11 +43,11 @@ bun test
 
 ### 本地安装到当前项目
 
-**方式一（推荐，适合开发调试）**：将 `index.ts` 复制到 `.opencode/plugins/`，OpenCode 会自动加载该目录下的插件文件，无需 npm 发布：
+**方式一（推荐，适合开发调试）**：将 `index.ts` hardlink 到 `.opencode/plugins/`，OpenCode 会自动加载该目录下的插件文件，修改 `index.ts` 后插件自动生效，无需手动复制：
 
 ```bash
 mkdir -p .opencode/plugins
-cp index.ts .opencode/plugins/notify-ios.ts
+ln -f index.ts .opencode/plugins/notify-ios.ts
 ```
 
 **方式二（需先发布到 npm）**：在项目 `opencode.json` 中声明 npm 包：
