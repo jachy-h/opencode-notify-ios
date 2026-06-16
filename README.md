@@ -30,7 +30,7 @@
 
 ## 配置
 
-在项目根目录创建 `notify-ios.json`：
+在项目根目录创建 `notify-ios.json`，或者在全局目录 `~/.config/opencode/notify-ios.json` 创建一份共用配置（项目优先于全局）：
 
 ```json
 {

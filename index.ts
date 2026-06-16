@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "fs"
 import { join, basename } from "path"
+import { homedir } from "os"
 
 interface Template {
   title?: string
@@ -47,13 +48,19 @@ class DedupBuffer {
 }
 
 export function loadConfig(directory: string): BarkConfig {
-  const configPath = join(directory, "notify-ios.json")
-  if (!existsSync(configPath)) return {}
-  try {
-    return JSON.parse(readFileSync(configPath, "utf-8"))
-  } catch {
-    return {}
+  const candidates = [
+    join(directory, "notify-ios.json"),
+    join(homedir(), ".config", "opencode", "notify-ios.json"),
+  ]
+  for (const path of candidates) {
+    if (!existsSync(path)) continue
+    try {
+      return JSON.parse(readFileSync(path, "utf-8"))
+    } catch {
+      return {}
+    }
   }
+  return {}
 }
 
 export function resolveTemplate(

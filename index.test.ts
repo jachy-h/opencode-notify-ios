@@ -35,6 +35,32 @@ describe("loadConfig", () => {
     spyOn(fs, "readFileSync").mockReturnValue("{invalid")
     expect(loadConfig("/fake/dir")).toEqual({})
   })
+
+  it("falls back to global ~/.config/opencode/notify-ios.json when project config missing", () => {
+    const globalConfig = { deviceKey: "global-key", sound: "bell" }
+    spyOn(fs, "existsSync").mockImplementation((p) => {
+      return String(p).includes(".config/opencode/notify-ios.json")
+    })
+    spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(globalConfig))
+
+    const result = loadConfig("/fake/project")
+    expect(result.deviceKey).toBe("global-key")
+    expect(result.sound).toBe("bell")
+  })
+
+  it("project config takes priority over global", () => {
+    const projectConfig = { deviceKey: "project-key" }
+    spyOn(fs, "existsSync").mockReturnValue(true)
+    spyOn(fs, "readFileSync").mockImplementation((p) => {
+      if (String(p).includes(".config/opencode/notify-ios.json")) {
+        return JSON.stringify({ deviceKey: "global-key" })
+      }
+      return JSON.stringify(projectConfig)
+    })
+
+    const result = loadConfig("/fake/project")
+    expect(result.deviceKey).toBe("project-key")
+  })
 })
 
 // ---------------------------------------------------------------------------
